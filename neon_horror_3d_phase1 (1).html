@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Neon Horror</title>
+<style>
+body { margin:0; overflow:hidden; background:black; }
+#menu {
+  position:absolute; inset:0;
+  display:flex; justify-content:center; align-items:center;
+  flex-direction:column;
+  background:black; color:#aaa;
+  font-family:Arial;
+}
+button {
+  padding:14px 32px;
+  font-size:18px;
+  background:#222;
+  color:#fff;
+  border:1px solid #555;
+  cursor:pointer;
+}
+#vignette {
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background:radial-gradient(circle at center, transparent 40%, black 75%);
+}
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>NEON HORROR</h1>
+  <p>You are not alone.</p>
+  <button onclick="start()">ENTER</button>
+</div>
+
+<div id="vignette"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+let scene, camera, renderer;
+let player;
+let keys = {};
+let yaw = 0, pitch = 0;
+let flashlight;
+let enemy;
+let started = false;
+let pointerLocked = false;
+
+addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+addEventListener("mousemove", e => {
+  if (!pointerLocked) return;
+  yaw -= e.movementX * 0.002;
+  pitch -= e.movementY * 0.002;
+  pitch = Math.max(-1.1, Math.min(1.1, pitch));
+});
+
+addEventListener("click", () => {
+  if (!pointerLocked) renderer.domElement.requestPointerLock();
+});
+
+document.addEventListener("pointerlockchange", () => {
+  pointerLocked = document.pointerLockElement === renderer?.domElement;
+});
+
+function start() {
+  document.getElementById("menu").style.display = "none";
+  init();
+  started = true;
+}
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+  scene.fog = new THREE.Fog(0x000000, 6, 35);
+
+  camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 100);
+
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Emergency ambient (prevents total black)
+  scene.add(new THREE.AmbientLight(0x080808));
+
+  flashlight = new THREE.SpotLight(0xffffff, 2.5, 30, Math.PI / 6, 0.6);
+  scene.add(flashlight);
+  scene.add(flashlight.target);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200),
+    new THREE.MeshStandardMaterial({ color:0x050505 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
+
+  // Player container
+  player = new THREE.Object3D();
+  player.position.set(0, 1.6, 5);
+  scene.add(player);
+
+  // Subtle body shadow
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.35, 0.45, 1.6, 6),
+    new THREE.MeshStandardMaterial({ color:0x0a0a0a })
+  );
+  body.position.y = -0.8;
+  player.add(body);
+
+  // Enemy
+  enemy = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.6, 0.6, 2.5, 6),
+    new THREE.MeshStandardMaterial({ color:0x111111 })
+  );
+  enemy.position.set(0, 1.25, -15);
+  scene.add(enemy);
+
+  animate();
+}
+
+function update() {
+  if (!started) return;
+
+  const speed = 0.05;
+
+  const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).normalize();
+  const right = new THREE.Vector3(forward.z, 0, -forward.x);
+
+  if (keys.w) player.position.addScaledVector(forward, -speed);
+  if (keys.s) player.position.addScaledVector(forward, speed);
+  if (keys.a) player.position.addScaledVector(right, -speed);
+  if (keys.d) player.position.addScaledVector(right, speed);
+
+  if (keys.f) {
+    flashlight.visible = !flashlight.visible;
+    keys.f = false;
+  }
+
+  // Enemy stalk
+  const dir = player.position.clone().sub(enemy.position).normalize();
+  enemy.position.addScaledVector(dir, 0.012);
+
+  // Camera
+  camera.position.copy(player.position);
+  camera.rotation.order = "YXZ";
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+
+  // Flashlight ALWAYS aims forward
+  flashlight.position.copy(camera.position);
+  flashlight.target.position.copy(
+    camera.position.clone().add(forward)
+  );
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  update();
+  renderer.render(scene, camera);
+}
+</script>
+
+</body>
+</html>
